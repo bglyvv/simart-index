@@ -111,7 +111,7 @@ a{color:inherit;text-decoration:none}
 .btn-primary:hover{background:var(--purple-2);transform:translateY(-2px);box-shadow:0 12px 26px rgba(91,42,126,.32)}
 .cta .btn-primary{margin-top:max(18px,calc(var(--u)*24))}
 .hint{margin-top:max(12px,calc(var(--u)*18));font-size:max(12.5px,calc(var(--u)*13.5));font-weight:600;color:#4f3e5c}
-.hint span{display:inline-block;animation:nudge 1.8s ease-in-out infinite}
+#hintArrow{display:inline-block;margin-left:3px;animation:nudge 1.8s ease-in-out infinite}
 @keyframes nudge{50%{transform:translateY(3px)}}
 
 .back-to{position:absolute;left:50%;bottom:max(18px,3.2vh);z-index:7;transform:translate(-50%,10px);opacity:0;pointer-events:none;transition:opacity .35s,transform .35s;
@@ -268,6 +268,28 @@ a{color:inherit;text-decoration:none}
 .footer small{display:block;margin-top:28px;color:#9b8ba5;font-weight:600}
 .footer .brand-mark{width:54px;height:44px}
 
+/* ---------- phone / narrow mode: pages turn with left-right swipes, vertical scroll stays native ---------- */
+.arc{touch-action:pan-y}
+.journey.swipe-mode{height:auto}
+.journey.swipe-mode .stage{position:relative;touch-action:pan-y;-webkit-user-select:none;user-select:none}
+.book-nav{position:absolute;left:50%;bottom:max(16px,2.6vh);z-index:8;display:flex;align-items:center;gap:12px;padding:6px;border-radius:999px;
+  background:rgba(255,255,255,.85);box-shadow:0 6px 18px rgba(60,30,70,.13);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+  transform:translate(-50%,12px);opacity:0;pointer-events:none;transition:opacity .3s,transform .3s}
+.book-nav.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.book-nav .nb{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;color:var(--purple);background:#fff;box-shadow:0 2px 6px rgba(60,30,70,.1)}
+.book-nav .nb svg{width:18px;height:18px}
+.book-nav .nb:disabled{opacity:.35;cursor:default}
+.book-nav .steps{display:flex;align-items:center;gap:6px}
+.book-nav .steps i{width:7px;height:7px;border-radius:4px;background:#d6c3d4;transition:background .25s,width .25s}
+.book-nav .steps i.on{background:var(--purple);width:18px}
+.swipe-hint{position:absolute;left:0;right:0;bottom:calc(max(16px,2.6vh) + 62px);z-index:8;text-align:center;font-weight:700;font-size:13.5px;color:#5b4a66;
+  opacity:0;transition:opacity .4s;pointer-events:none}
+.swipe-hint.show{opacity:1}
+.swipe-hint b{display:inline-block;animation:swipeNudge 1.6s ease-in-out infinite}
+@keyframes swipeNudge{50%{transform:translateX(-8px)}}
+.journey.swipe-mode .back-to{bottom:calc(max(16px,2.6vh) + 62px)}
+.journey.swipe-mode #hintArrow{animation-name:swipeNudge}
+
 @media (max-width:860px){ .nav{display:none} .topbar{grid-template-columns:1fr auto} }
 @media (prefers-reduced-motion:reduce){ .tile,.tile-in{transition-duration:.01s} .hint span{animation:none} }
 </style>
@@ -319,7 +341,7 @@ a{color:inherit;text-decoration:none}
       <div class="cta" id="cta">
         <div class="dots" id="dots" role="tablist" aria-label="Kitab seçimi"></div>
         <button class="btn-primary" id="explore" type="button">Kitabı kəşf et</button>
-        <div class="hint">Aşağı sürüşdür <span>↓</span></div>
+        <div class="hint"><span id="hintText">Aşağı sürüşdür</span> <span id="hintArrow">↓</span></div>
       </div>
 
       <div class="book-anchor" id="anchor">
@@ -343,6 +365,12 @@ a{color:inherit;text-decoration:none}
       </div>
 
       <button class="back-to" id="backTo" type="button">↑ Kitablara qayıt</button>
+      <div class="swipe-hint" id="swipeHint"><b>←</b> Səhifəni çevirmək üçün sürüşdür</div>
+      <div class="book-nav" id="bookNav" role="group" aria-label="Səhifələr">
+        <button class="nb" id="bPrev" type="button" aria-label="Əvvəlki səhifə"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5 8 12l7 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <div class="steps" id="steps"></div>
+        <button class="nb" id="bNext" type="button" aria-label="Növbəti səhifə"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      </div>
       <p class="sr" id="live" aria-live="polite"></p>
     </div>
   </section>
@@ -656,13 +684,15 @@ const shift = d => select(selected + d);
 prevBtn.addEventListener('click', () => shift(-1));
 nextBtn.addEventListener('click', () => shift(1));
 document.addEventListener('keydown', e => {
-  if (shown > .02 || e.altKey || e.ctrlKey || e.metaKey) return;
-  if (e.key === 'ArrowLeft') { shift(-1); e.preventDefault(); }
-  if (e.key === 'ArrowRight') { shift(1); e.preventDefault(); }
+  if (e.altKey || e.ctrlKey || e.metaKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+  const d = e.key === 'ArrowRight' ? 1 : -1;
+  if (swipeMode && Math.round(swipeF) >= 1) { swipeTo(Math.round(swipeF) + d); e.preventDefault(); return; }  // turn pages
+  if (shown > .02) return;
+  shift(d); e.preventDefault();                                                                           // change book
 });
 /* swipe on the arch (touch & mouse drag) */
 let swX = null, swiped = false;
-arc.addEventListener('pointerdown', e => { swX = e.clientX; swiped = false; });
+arc.addEventListener('pointerdown', e => { if (shown > .02) return; swX = e.clientX; swiped = false; });
 addEventListener('pointerup', e => {
   if (swX === null) return;
   const dx = e.clientX - swX; swX = null;
@@ -690,6 +720,7 @@ function buildShelf() {
 function layout() {
   const sw = stage.clientWidth, sh = stage.clientHeight, hh = header.offsetHeight;
   const mobile = sw < 720 || sw / sh < .8;
+  setSwipeMode(mobile);
   let u = mobile ? Math.min(sw / 450, (sh - hh) / 600) : Math.min(sw / 1106, sh / 618);
   u = clamp(u, .4, 2);
   const top = 90, bottom = 610;                      // design-space vertical extent of the hero
@@ -743,13 +774,84 @@ function layout() {
 }
 
 /* ============================================================ SCROLL → PROGRESS */
-const distance = () => journey.offsetHeight - stage.offsetHeight;
+const distance = () => Math.max(1, journey.offsetHeight - stage.offsetHeight);
 const targetProgress = () => clamp((scrollY - journey.offsetTop) / distance());
 const scrollToProgress = p => scrollTo({ top: journey.offsetTop + p * distance(), behavior: reduceMotion ? 'auto' : 'smooth' });
-function startJourney() { scrollToProgress(TL.grow[1] + .015); }
+
+/* Stops = the resting states: shelf, closed book, title, author, about, price, back cover.
+   Desktop: reached by scrolling (HOLD = scroll progress of each stop).
+   Phone ("swipe mode"): the journey is one screen tall, pages turn with left/right swipes,
+   and vertical scrolling is left completely to the browser. */
+const HOLD = [0, .125, .275, .425, .595, .77, .955];
+const LAST = HOLD.length - 1;
+let swipeMode = false, swipeF = 0, shownF = 0, dragging = false, swipedOnce = false;
+/* in swipe mode a fractional stop index maps straight onto the transition between two stops */
+const progressAt = f => { f = clamp(f, 0, LAST); if (f >= LAST) return HOLD[LAST]; const i = Math.floor(f), [a, b] = TRANSITIONS[i]; return f === i && i > 0 ? HOLD[i] : lerp(a, b, f - i); };
+const nearestStop = p => HOLD.reduce((best, h, i) => Math.abs(h - p) < Math.abs(HOLD[best] - p) ? i : best, 0);
+function swipeTo(i) {
+  swipeF = clamp(Math.round(i), 0, LAST);
+  if (swipeF >= 2) swipedOnce = true;
+}
+function setSwipeMode(on) {
+  if (on === swipeMode) return;
+  const stop = swipeMode ? Math.round(swipeF) : nearestStop(shown);
+  const inJourney = scrollY < journey.offsetTop + journey.offsetHeight - 1;
+  swipeMode = on;
+  journey.classList.toggle('swipe-mode', on);
+  if (on && inJourney) scrollTo(0, journey.offsetTop);   // keep the book on screen when the page gets shorter
+  $('hintText').textContent = on ? 'Sola-sağa sürüşdür' : 'Aşağı sürüşdür';
+  $('hintArrow').textContent = on ? '↔' : '↓';
+  if (on) { swipeF = shownF = stop; shown = progressAt(stop); }
+  else requestAnimationFrame(() => { scrollTo(0, journey.offsetTop + HOLD[stop] * distance()); shown = HOLD[stop]; });
+}
+const toTop = () => { if (scrollY > journey.offsetTop + 4) scrollTo({ top: journey.offsetTop, behavior: reduceMotion ? 'auto' : 'smooth' }); };
+function startJourney() { if (swipeMode) { toTop(); swipeTo(1); } else scrollToProgress(TL.grow[1] + .015); }
+function backToShelf() { if (swipeMode) { toTop(); swipeTo(0); } else scrollToProgress(0); }
 $('explore').addEventListener('click', startJourney);
-backTo.addEventListener('click', () => scrollToProgress(0));
-$('footerBack').addEventListener('click', () => scrollToProgress(0));
+backTo.addEventListener('click', backToShelf);
+$('footerBack').addEventListener('click', backToShelf);
+$('bPrev').addEventListener('click', () => swipeTo(Math.round(swipeF) - 1));
+$('bNext').addEventListener('click', () => swipeTo(Math.round(swipeF) + 1));
+$('steps').innerHTML = HOLD.slice(1).map(() => '<i></i>').join('');
+const stepDots = [...$('steps').children];
+
+/* horizontal drag turns pages and follows the finger; a vertical drag is handed to the browser (touch-action: pan-y) */
+let gst = null;
+stage.addEventListener('pointerdown', e => {
+  if (!swipeMode || e.button > 0 || e.target.closest('a,button')) return;
+  const idx = Math.round(swipeF);
+  if (idx < 1) return;                                   // on the shelf the swipe changes the book instead
+  gst = { id: e.pointerId, x: e.clientX, y: e.clientY, idx, dir: null, lx: e.clientX, lt: performance.now(), v: 0 };
+});
+stage.addEventListener('pointermove', e => {
+  if (!gst || e.pointerId !== gst.id) return;
+  const dx = e.clientX - gst.x, dy = e.clientY - gst.y;
+  if (!gst.dir) {
+    if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+    gst.dir = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
+    if (gst.dir === 'v') { gst = null; return; }
+    dragging = true;
+  }
+  const now = performance.now();
+  gst.v = (e.clientX - gst.lx) / Math.max(1, now - gst.lt); gst.lx = e.clientX; gst.lt = now;
+  swipeF = clamp(gst.idx - dx / (G.sw * .6), 0, LAST);   // drag a little over half the screen = one page
+});
+function endDrag(e, cancel) {
+  if (!gst || (e && e.pointerId !== gst.id)) return;
+  if (gst.dir === 'h') {
+    const f = gst.idx - swipeF;                          // < 0 → forward
+    const flick = Math.abs(gst.v) > .35;
+    let target = gst.idx;
+    if (!cancel && (Math.abs(f) > .2 || flick)) {
+      const d = Math.abs(f) > .2 ? -Math.sign(f) : (gst.v < 0 ? 1 : -1);
+      target = gst.idx + d * Math.max(1, Math.round(Math.abs(f)));
+    }
+    swipeTo(target);
+  }
+  gst = null; dragging = false;
+}
+stage.addEventListener('pointerup', e => endDrag(e, false));
+stage.addEventListener('pointercancel', e => endDrag(e, true));
 
 /* finish a half-done page turn in the direction the user was scrolling */
 let lastY = scrollY, dir = 1, idle = 0, touching = false;
@@ -760,7 +862,7 @@ addEventListener('scroll', () => {
   clearTimeout(idle); idle = setTimeout(settle, 170);
 }, { passive: true });
 function settle() {
-  if (!SNAP || touching) return;
+  if (!SNAP || touching || swipeMode) return;
   const p = targetProgress();
   if (p <= 0 || p >= 1) return;
   for (const [a, b] of TRANSITIONS) {
@@ -771,10 +873,17 @@ function settle() {
 /* ============================================================ RENDER */
 let shown = 0, lastP = -1, lastT = performance.now();
 function frame(now) {
-  const target = targetProgress();
   const dt = Math.min(64, now - lastT); lastT = now;
-  shown = reduceMotion ? target : shown + (target - shown) * (1 - Math.pow(1 - .16, dt / 16.7));
-  if (Math.abs(target - shown) < .00005) shown = target;
+  const k = base => 1 - Math.pow(1 - base, dt / 16.7);
+  if (swipeMode) {
+    shownF = reduceMotion ? swipeF : shownF + (swipeF - shownF) * k(dragging ? .5 : .12);
+    if (Math.abs(swipeF - shownF) < .0004) shownF = swipeF;
+    shown = progressAt(shownF);
+  } else {
+    const target = targetProgress();
+    shown = reduceMotion ? target : shown + (target - shown) * k(.16);
+    if (Math.abs(target - shown) < .00005) shown = target;
+  }
   if (Math.abs(shown - lastP) > .00001) { render(shown); lastP = shown; }
   requestAnimationFrame(frame);
 }
@@ -844,6 +953,13 @@ function render(p) {
 
   book.classList.toggle('interactive', p > TL.l3[1] - .005 && p < TL.close[0] + .01);
   backTo.classList.toggle('show', p > TL.close[1] + .02 && p < .999);
+
+  /* phone controls */
+  const stop = Math.round(swipeF);
+  $('bookNav').classList.toggle('show', swipeMode && p > .06);
+  $('bPrev').disabled = stop < 1; $('bNext').disabled = stop >= LAST;
+  stepDots.forEach((d, i) => d.classList.toggle('on', i + 1 === stop));
+  $('swipeHint').classList.toggle('show', swipeMode && !swipedOnce && stop === 1 && Math.abs(shownF - 1) < .05);
 }
 
 /* ============================================================ INIT */
@@ -852,7 +968,7 @@ fillBook(selected);
 layout();
 live.textContent = BOOKS[selected].title;
 addEventListener('resize', () => { clearTimeout(layout._t); layout._t = setTimeout(layout, 80); });
-shown = targetProgress();
+if (!swipeMode) shown = targetProgress();
 requestAnimationFrame(frame);
 })();
 </script>
